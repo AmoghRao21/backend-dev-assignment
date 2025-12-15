@@ -1,7 +1,12 @@
-import re 
+import os
+import re
+from dotenv import load_dotenv
 import pandas as pd
 import psycopg2
+from psycopg2.extras import execute_batch
 from datetime import datetime
+
+load_dotenv()
 
 def extract():
     return pd.read_csv("data/Uncleaned_DS_jobs.csv")
@@ -39,12 +44,42 @@ def transform(df):
     return df
 
 
+
 def load(df):
-    pass
+    conn = psycopg2.connect(
+        host=os.getenv("PGHOST"),
+        dbname=os.getenv("PGDATABASE"),
+        user=os.getenv("PGUSER"),
+        password=os.getenv("PGPASSWORD"),
+        port=5432,
+        sslmode="require"
+    )
+    cur = conn.cursor()
+
+    insert_sql = """
+        insert into jobs_clean (
+            job_title, company_name, location, rating,
+            salary_min, salary_max, industry, sector,
+            revenue, founded_year, ownership_type, competitors
+        )
+        values (
+            %(job_title)s, %(company_name)s, %(location)s, %(rating)s,
+            %(salary_min)s, %(salary_max)s, %(industry)s, %(sector)s,
+            %(revenue)s, %(founded)s, %(type_of_ownership)s, %(competitors)s
+        )
+    """
+
+    records = df.to_dict(orient="records")
+    execute_batch(cur, insert_sql, records, page_size=100)
+
+    conn.commit()
+    cur.close()
+    conn.close()
 
 def main():
     df = extract()
     df = transform(df)
+    print("Rows after transform:", len(df))
     load(df)
 
 if __name__ == "__main__":
